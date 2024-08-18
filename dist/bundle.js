@@ -29499,6 +29499,112 @@ const _wordCharOrDot$1 = '[^' + _RESERVED_CHARS_RE$1.replace( '\\.', '' ) + ']';
 // contain any non-bracket characters.
 /\.(WC+)(?:\[(.+)\])?/.source.replace( 'WC', _wordChar$1 );
 
+class Raycaster {
+
+	constructor( origin, direction, near = 0, far = Infinity ) {
+
+		this.ray = new Ray$1( origin, direction );
+		// direction is assumed to be normalized (for accurate distance calculations)
+
+		this.near = near;
+		this.far = far;
+		this.camera = null;
+		this.layers = new Layers$1();
+
+		this.params = {
+			Mesh: {},
+			Line: { threshold: 1 },
+			LOD: {},
+			Points: { threshold: 1 },
+			Sprite: {}
+		};
+
+	}
+
+	set( origin, direction ) {
+
+		// direction is assumed to be normalized (for accurate distance calculations)
+
+		this.ray.set( origin, direction );
+
+	}
+
+	setFromCamera( coords, camera ) {
+
+		if ( camera.isPerspectiveCamera ) {
+
+			this.ray.origin.setFromMatrixPosition( camera.matrixWorld );
+			this.ray.direction.set( coords.x, coords.y, 0.5 ).unproject( camera ).sub( this.ray.origin ).normalize();
+			this.camera = camera;
+
+		} else if ( camera.isOrthographicCamera ) {
+
+			this.ray.origin.set( coords.x, coords.y, ( camera.near + camera.far ) / ( camera.near - camera.far ) ).unproject( camera ); // set origin in plane of camera
+			this.ray.direction.set( 0, 0, - 1 ).transformDirection( camera.matrixWorld );
+			this.camera = camera;
+
+		} else {
+
+			console.error( 'THREE.Raycaster: Unsupported camera type: ' + camera.type );
+
+		}
+
+	}
+
+	intersectObject( object, recursive = true, intersects = [] ) {
+
+		intersectObject( object, this, intersects, recursive );
+
+		intersects.sort( ascSort );
+
+		return intersects;
+
+	}
+
+	intersectObjects( objects, recursive = true, intersects = [] ) {
+
+		for ( let i = 0, l = objects.length; i < l; i ++ ) {
+
+			intersectObject( objects[ i ], this, intersects, recursive );
+
+		}
+
+		intersects.sort( ascSort );
+
+		return intersects;
+
+	}
+
+}
+
+function ascSort( a, b ) {
+
+	return a.distance - b.distance;
+
+}
+
+function intersectObject( object, raycaster, intersects, recursive ) {
+
+	if ( object.layers.test( raycaster.layers ) ) {
+
+		object.raycast( raycaster, intersects );
+
+	}
+
+	if ( recursive === true ) {
+
+		const children = object.children;
+
+		for ( let i = 0, l = children.length; i < l; i ++ ) {
+
+			intersectObject( children[ i ], raycaster, intersects, true );
+
+		}
+
+	}
+
+}
+
 /**
  * Ref: https://en.wikipedia.org/wiki/Spherical_coordinate_system
  *
@@ -119724,92 +119830,122 @@ class IFCLoader extends Loader {
 
 }
 
-//Creates the Three.js scene
-  const scene = new Scene$1();
+// Creates the Three.js scene
+const scene = new Scene$1();
 
-  //Object to store the size of the viewport
-  const size = {
-    width: window.innerWidth,
-    height: window.innerHeight,
-  };
+// Init raycaster and mouse to store mouse position
+const raycaster = new Raycaster();
+const mouse = new Vector2$1();
 
-  //Creates the camera (point of view of the user)
-  const aspect = size.width / size.height;
-  const camera = new PerspectiveCamera$1(75, aspect);
-  camera.position.z = 15;
-  camera.position.y = 13;
-  camera.position.x = 8;
+// Object to store the size of the viewport
+const size = {
+  width: window.innerWidth,
+  height: window.innerHeight,
+};
 
-  //Creates the lights of the scene
-  const lightColor = 0xffffff;
+// Creates the camera (point of view of the user)
+const aspect = size.width / size.height;
+const camera = new PerspectiveCamera$1(75, aspect);
+camera.position.z = 15;
+camera.position.y = 13;
+camera.position.x = 8;
 
-  const ambientLight = new AmbientLight$1(lightColor, 0.5);
-  scene.add(ambientLight);
+// Creates the lights of the scene
+const lightColor = 0xffffff;
 
-  const directionalLight = new DirectionalLight$1(lightColor, 1);
-  directionalLight.position.set(0, 10, 0);
-  directionalLight.target.position.set(-5, 0, 0);
-  scene.add(directionalLight);
-  scene.add(directionalLight.target);
+const ambientLight = new AmbientLight$1(lightColor, 0.5);
+scene.add(ambientLight);
 
-  //Sets up the renderer, fetching the canvas of the HTML
-  const threeCanvas = document.getElementById("three-canvas");
-  const renderer = new WebGLRenderer$1({
-      canvas: threeCanvas,
-      alpha: true
-  });
+const directionalLight = new DirectionalLight$1(lightColor, 1);
+directionalLight.position.set(0, 10, 0);
+directionalLight.target.position.set(-5, 0, 0);
+scene.add(directionalLight);
+scene.add(directionalLight.target);
 
+// Sets up the renderer, fetching the canvas of the HTML
+const threeCanvas = document.getElementById("three-canvas");
+const renderer = new WebGLRenderer$1({
+  canvas: threeCanvas,
+  alpha: true,
+});
+
+renderer.setSize(size.width, size.height);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+// Creates grids and axes in the scene
+const grid = new GridHelper$1(50, 30);
+scene.add(grid);
+
+const axes = new AxesHelper();
+axes.material.depthTest = false;
+axes.renderOrder = 1;
+scene.add(axes);
+
+// Creates the orbit controls (to navigate the scene)
+const controls = new OrbitControls(camera, threeCanvas);
+controls.enableDamping = true;
+controls.target.set(-2, 0, 0);
+
+// Animation loop
+const animate = () => {
+  controls.update();
+  renderer.render(scene, camera);
+  requestAnimationFrame(animate);
+};
+
+animate();
+
+// Adjust the viewport to the size of the browser
+window.addEventListener("resize", () => {
+  size.width = window.innerWidth;
+  size.height = window.innerHeight;
+  camera.aspect = size.width / size.height;
+  camera.updateProjectionMatrix();
   renderer.setSize(size.width, size.height);
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+});
 
-  //Creates grids and axes in the scene
-  const grid = new GridHelper$1(50, 30);
-  scene.add(grid);
+// Sets up the IFC loading
+let ifcModel = null;
+const ifcLoader = new IFCLoader();
+ifcLoader.ifcManager.setWasmPath("../wasm/");
 
-  const axes = new AxesHelper();
-  axes.material.depthTest = false;
-  axes.renderOrder = 1;
-  scene.add(axes);
+const input = document.getElementById("file-input");
+input.addEventListener(
+  "change",
+  (changed) => {
+    const file = changed.target.files[0];
+    var ifcURL = URL.createObjectURL(file);
+    ifcLoader.load(ifcURL, (model) => {
+      ifcModel = model;
+      scene.add(ifcModel);
+      console.log('IFC Model is successfully loaded');
+    });
+  },
+  false
+);
 
-  //Creates the orbit controls (to navigate the scene)
-  const controls = new OrbitControls(camera, threeCanvas);
-  controls.enableDamping = true;
-  controls.target.set(-2, 0, 0);
+threeCanvas.addEventListener("click", (e) => {
+  if (!ifcModel) return;
 
-  //Animation loop
-  const animate = () => {
-    controls.update();
-    renderer.render(scene, camera);
-    requestAnimationFrame(animate);
-  };
+  // Convert the mouse click position to normalized device coordinates
+  mouse.x = (e.clientX / size.width) * 2 - 1;
+  mouse.y = -(e.clientY / size.height) * 2 + 1;
 
-  animate();
+  // Update the raycaster with the camera and mouse position
+  raycaster.setFromCamera(mouse, camera);
 
-  //Adjust the viewport to the size of the browser
-  window.addEventListener("resize", () => {
-    size.width = window.innerWidth;
-    size.height = window.innerHeight;
-    camera.aspect = size.width / size.height;
-    camera.updateProjectionMatrix();
-    renderer.setSize(size.width, size.height);
-  });
+  // Calculate objects intersected by the ray
+  const intersects = raycaster.intersectObjects([ifcModel], true);
 
-  // Sets up the IFC loading
-  const ifcLoader = new IFCLoader();
-  ifcLoader.ifcManager.setWasmPath("../wasm/");
-  const input = document.getElementById("file-input");
-  input.addEventListener(
-    "change",
-    (changed) => {
-      const file = changed.target.files[0];
-      var ifcURL = URL.createObjectURL(file);
-      ifcLoader.load(
-            ifcURL,
-            (ifcModel) => {
-              scene.add(ifcModel);
-              console.log(ifcModel);
-              
-            });
-    },
-    false
-  );
+  // Check if an object was intersected
+  if (intersects.length > 0) {
+    const selectedObject = intersects[0].object;
+    console.log("Selected object:", selectedObject);
+
+    // Check if the material supports color changes
+    if (selectedObject.material && selectedObject.material.color) {
+      // Optionally, change the material color of the selected object to highlight it
+      selectedObject.material.color.set(0xffcc00);
+    }
+  }
+});

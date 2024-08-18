@@ -1,105 +1,134 @@
-import './style.css'
+import "./style.css";
 import {
-    AmbientLight,
-    AxesHelper,
-    DirectionalLight,
-    GridHelper,
-    PerspectiveCamera,
-    Scene,
-    WebGLRenderer,
-  } from "three";
-  import {
-      OrbitControls
-  } from "three/examples/jsm/controls/OrbitControls";
+  AmbientLight,
+  AxesHelper,
+  DirectionalLight,
+  GridHelper,
+  PerspectiveCamera,
+  Scene,
+  WebGLRenderer,
+  Raycaster,
+  Vector2,
+} from "three";
+import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
+import { IFCLoader } from "web-ifc-three/IFCLoader";
 
-  //Creates the Three.js scene
-  const scene = new Scene();
+// Creates the Three.js scene
+const scene = new Scene();
 
-  //Object to store the size of the viewport
-  const size = {
-    width: window.innerWidth,
-    height: window.innerHeight,
-  };
+// Init raycaster and mouse to store mouse position
+const raycaster = new Raycaster();
+const mouse = new Vector2();
 
-  //Creates the camera (point of view of the user)
-  const aspect = size.width / size.height;
-  const camera = new PerspectiveCamera(75, aspect);
-  camera.position.z = 15;
-  camera.position.y = 13;
-  camera.position.x = 8;
+// Object to store the size of the viewport
+const size = {
+  width: window.innerWidth,
+  height: window.innerHeight,
+};
 
-  //Creates the lights of the scene
-  const lightColor = 0xffffff;
+// Creates the camera (point of view of the user)
+const aspect = size.width / size.height;
+const camera = new PerspectiveCamera(75, aspect);
+camera.position.z = 15;
+camera.position.y = 13;
+camera.position.x = 8;
 
-  const ambientLight = new AmbientLight(lightColor, 0.5);
-  scene.add(ambientLight);
+// Creates the lights of the scene
+const lightColor = 0xffffff;
 
-  const directionalLight = new DirectionalLight(lightColor, 1);
-  directionalLight.position.set(0, 10, 0);
-  directionalLight.target.position.set(-5, 0, 0);
-  scene.add(directionalLight);
-  scene.add(directionalLight.target);
+const ambientLight = new AmbientLight(lightColor, 0.5);
+scene.add(ambientLight);
 
-  //Sets up the renderer, fetching the canvas of the HTML
-  const threeCanvas = document.getElementById("three-canvas");
-  const renderer = new WebGLRenderer({
-      canvas: threeCanvas,
-      alpha: true
-  });
+const directionalLight = new DirectionalLight(lightColor, 1);
+directionalLight.position.set(0, 10, 0);
+directionalLight.target.position.set(-5, 0, 0);
+scene.add(directionalLight);
+scene.add(directionalLight.target);
 
+// Sets up the renderer, fetching the canvas of the HTML
+const threeCanvas = document.getElementById("three-canvas");
+const renderer = new WebGLRenderer({
+  canvas: threeCanvas,
+  alpha: true,
+});
+
+renderer.setSize(size.width, size.height);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+// Creates grids and axes in the scene
+const grid = new GridHelper(50, 30);
+scene.add(grid);
+
+const axes = new AxesHelper();
+axes.material.depthTest = false;
+axes.renderOrder = 1;
+scene.add(axes);
+
+// Creates the orbit controls (to navigate the scene)
+const controls = new OrbitControls(camera, threeCanvas);
+controls.enableDamping = true;
+controls.target.set(-2, 0, 0);
+
+// Animation loop
+const animate = () => {
+  controls.update();
+  renderer.render(scene, camera);
+  requestAnimationFrame(animate);
+};
+
+animate();
+
+// Adjust the viewport to the size of the browser
+window.addEventListener("resize", () => {
+  size.width = window.innerWidth;
+  size.height = window.innerHeight;
+  camera.aspect = size.width / size.height;
+  camera.updateProjectionMatrix();
   renderer.setSize(size.width, size.height);
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+});
 
-  //Creates grids and axes in the scene
-  const grid = new GridHelper(50, 30);
-  scene.add(grid);
+// Sets up the IFC loading
+let ifcModel = null;
+const ifcLoader = new IFCLoader();
+ifcLoader.ifcManager.setWasmPath("../wasm/");
 
-  const axes = new AxesHelper();
-  axes.material.depthTest = false;
-  axes.renderOrder = 1;
-  scene.add(axes);
+const input = document.getElementById("file-input");
+input.addEventListener(
+  "change",
+  (changed) => {
+    const file = changed.target.files[0];
+    var ifcURL = URL.createObjectURL(file);
+    ifcLoader.load(ifcURL, (model) => {
+      ifcModel = model;
+      scene.add(ifcModel);
+      console.log('IFC Model is successfully loaded');
+    });
+  },
+  false
+);
 
-  //Creates the orbit controls (to navigate the scene)
-  const controls = new OrbitControls(camera, threeCanvas);
-  controls.enableDamping = true;
-  controls.target.set(-2, 0, 0);
+threeCanvas.addEventListener("click", (e) => {
+  if (!ifcModel) return;
 
-  //Animation loop
-  const animate = () => {
-    controls.update();
-    renderer.render(scene, camera);
-    requestAnimationFrame(animate);
-  };
+  // Convert the mouse click position to normalized device coordinates
+  mouse.x = (e.clientX / size.width) * 2 - 1;
+  mouse.y = -(e.clientY / size.height) * 2 + 1;
 
-  animate();
+  // Update the raycaster with the camera and mouse position
+  raycaster.setFromCamera(mouse, camera);
 
-  //Adjust the viewport to the size of the browser
-  window.addEventListener("resize", () => {
-    size.width = window.innerWidth;
-    size.height = window.innerHeight;
-    camera.aspect = size.width / size.height;
-    camera.updateProjectionMatrix();
-    renderer.setSize(size.width, size.height);
-  });
+  // Calculate objects intersected by the ray
+  const intersects = raycaster.intersectObjects([ifcModel], true);
 
-  import { IFCLoader } from "web-ifc-three/IFCLoader";
+  // Check if an object was intersected
+  if (intersects.length > 0) {
+    const selectedObject = intersects[0].object;
+    console.log("Selected object:", selectedObject);
 
-  // Sets up the IFC loading
-  const ifcLoader = new IFCLoader();
-  ifcLoader.ifcManager.setWasmPath("../wasm/");
-  const input = document.getElementById("file-input");
-  input.addEventListener(
-    "change",
-    (changed) => {
-      const file = changed.target.files[0];
-      var ifcURL = URL.createObjectURL(file);
-      ifcLoader.load(
-            ifcURL,
-            (ifcModel) => {
-              scene.add(ifcModel);
-              console.log(ifcModel)
-              
-            });
-    },
-    false
-  );
+    // Check if the material supports color changes
+    if (selectedObject.material && selectedObject.material.color) {
+      // Optionally, change the material color of the selected object to highlight it
+      selectedObject.material.color.set(0xffcc00);
+    }
+  }
+});
