@@ -5,6 +5,7 @@ import {
   DirectionalLight,
   GridHelper,
   PerspectiveCamera,
+  OrthographicCamera,
   Scene,
   WebGLRenderer,
   Raycaster,
@@ -12,6 +13,7 @@ import {
   Box3,
   Vector3,
 } from "three";
+import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
 import { IFCLoader } from "web-ifc-three/IFCLoader";
 
@@ -28,12 +30,28 @@ const size = {
   height: window.innerHeight,
 };
 
-// Creates the camera (point of view of the user)
+// Creates the camera (point of view of the user)---> Default camera
 const aspect = size.width / size.height;
 const camera = new PerspectiveCamera(75, aspect);
 camera.position.z = 15;
 camera.position.y = 13;
 camera.position.x = 8;
+
+// Orthographic Camera
+const frustumSize = 10;
+const orthographicCamera = new OrthographicCamera(
+  (-frustumSize * aspect) / 2,
+  (frustumSize * aspect) / 2, // left, right
+  frustumSize / 2,
+  -frustumSize / 2, // top, bottom
+  0.1,
+  1000 // near, far
+);
+orthographicCamera.position.set(0, 1.6, 5);
+orthographicCamera.lookAt(new Vector3(0, 1.6, 0));
+
+// Set deafault camera perspective
+let activeCamera = camera;
 
 // Creates the lights of the scene
 const lightColor = 0xffffff;
@@ -58,12 +76,12 @@ renderer.setSize(size.width, size.height);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
 // Creates grids and axes in the scene
-const grid = new GridHelper(50, 30);
+const grid = new GridHelper(50, 20);
 scene.add(grid);
 
 const axes = new AxesHelper();
 axes.material.depthTest = false;
-axes.renderOrder = 1;
+axes.renderOrder = 15;
 scene.add(axes);
 
 // Creates the orbit controls (to navigate the scene)
@@ -74,11 +92,10 @@ controls.target.set(-2, 0, 0);
 // Animation loop
 const animate = () => {
   controls.update();
-  renderer.render(scene, camera);
+  renderer.render(scene, activeCamera);
   requestAnimationFrame(animate);
 };
 
-animate();
 
 // Adjust the viewport to the size of the browser
 window.addEventListener("resize", () => {
@@ -103,7 +120,7 @@ input.addEventListener(
     ifcLoader.load(ifcURL, (model) => {
       ifcModel = model;
       scene.add(ifcModel);
-      console.log('IFC Model is successfully loaded');
+      console.log("IFC Model is successfully loaded");
     });
   },
   false
@@ -133,12 +150,11 @@ threeCanvas.addEventListener("click", (e) => {
       selectedObject.material.color.set(0xffcc00);
     }
   }
-  getObjectDimensions(ifcModel)
+  getObjectDimensions(ifcModel);
 });
 
 // Gets the dimensions of the IFC Model
 function getObjectDimensions(ifcModel) {
-
   const boundingBox = new Box3().setFromObject(ifcModel);
 
   const size = new Vector3();
@@ -148,8 +164,48 @@ function getObjectDimensions(ifcModel) {
     width: Math.round(size.x),
     height: Math.round(size.y),
     depth: Math.round(size.z),
-  }
-  console.log(parameters)
+  };
+  console.log(parameters);
   return parameters;
 }
 
+// Sets the camera back to perspective
+const perspectiveBtn = document.getElementById('perspective-view');
+if (perspectiveBtn) {
+  perspectiveBtn.addEventListener('click', () => {
+    activeCamera = camera;
+    controls.object = camera;
+    controls.update();
+  })
+}
+
+// Set a front view and swith the camera to orthogonal
+const axonometricViewBtn = document.getElementById("front-view")
+axonometricViewBtn.addEventListener("click", () => {
+  activeCamera = orthographicCamera;
+  controls.object = activeCamera;
+  controls.update();
+  setFrontView();
+});
+
+function setFrontView() {
+  const box = new Box3().setFromObject(ifcModel);
+  const center = box.getCenter(new Vector3());
+  const size = box.getSize(new Vector3());
+
+  const maxDim = Math.max(size.x, size.y, size.z);
+  const distance = maxDim * 1.5;
+
+  const aspect = window.innerWidth / window.innerHeight;
+  orthographicCamera.left = (-distance * aspect) / 2;
+  orthographicCamera.right = (distance * aspect) / 2;
+  orthographicCamera.top = distance / 2;
+  orthographicCamera.bottom = -distance / 2;
+
+  orthographicCamera.updateProjectionMatrix();
+
+  orthographicCamera.position.set(center.x, center.y, center.z + distance);
+  orthographicCamera.lookAt(center);
+}
+
+animate();
