@@ -119948,4 +119948,22 @@ threeCanvas.addEventListener("click", (e) => {
       selectedObject.material.color.set(0xffcc00);
     }
   }
+  getObjectDimensions(ifcModel);
 });
+
+// Gets the dimensions of the IFC Model
+function getObjectDimensions(ifcModel) {
+
+  const boundingBox = new Box3$1().setFromObject(ifcModel);
+
+  const size = new Vector3$1();
+  boundingBox.getSize(size);
+
+  const parameters = {
+    width: Math.round(size.x),
+    height: Math.round(size.y),
+    depth: Math.round(size.z),
+  };
+  console.log(parameters);
+  return parameters;
+}
