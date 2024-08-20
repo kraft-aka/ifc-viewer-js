@@ -13,7 +13,6 @@ import {
   Box3,
   Vector3,
 } from "three";
-import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
 import { IFCLoader } from "web-ifc-three/IFCLoader";
 
@@ -70,6 +69,7 @@ const threeCanvas = document.getElementById("three-canvas");
 const renderer = new WebGLRenderer({
   canvas: threeCanvas,
   alpha: true,
+  antialias:true
 });
 
 renderer.setSize(size.width, size.height);
@@ -95,7 +95,6 @@ const animate = () => {
   renderer.render(scene, activeCamera);
   requestAnimationFrame(animate);
 };
-
 
 // Adjust the viewport to the size of the browser
 window.addEventListener("resize", () => {
@@ -170,17 +169,17 @@ function getObjectDimensions(ifcModel) {
 }
 
 // Sets the camera back to perspective
-const perspectiveBtn = document.getElementById('perspective-view');
+const perspectiveBtn = document.getElementById("perspective-view");
 if (perspectiveBtn) {
-  perspectiveBtn.addEventListener('click', () => {
+  perspectiveBtn.addEventListener("click", () => {
     activeCamera = camera;
     controls.object = camera;
     controls.update();
-  })
+  });
 }
 
 // Set a front view and swith the camera to orthogonal
-const axonometricViewBtn = document.getElementById("front-view")
+const axonometricViewBtn = document.getElementById("front-view");
 axonometricViewBtn.addEventListener("click", () => {
   activeCamera = orthographicCamera;
   controls.object = activeCamera;
@@ -207,5 +206,23 @@ function setFrontView() {
   orthographicCamera.position.set(center.x, center.y, center.z + distance);
   orthographicCamera.lookAt(center);
 }
+
+// Saves the image of the canvas
+function saveImage() {
+  renderer.render(scene, activeCamera);
+  let imgData = renderer.domElement.toDataURL("image/png", 1.0);
+  const link = document.createElement("a");
+  link.setAttribute("href", imgData);
+  link.setAttribute("target", "_blank");
+  link.setAttribute("download", "scene.jpeg");
+  link.click()
+}
+
+// on keydown 's' image is downloaded
+window.addEventListener("keydown", (e) => {
+  if (e.key === "s") {
+    saveImage();
+  }
+});
 
 animate();
